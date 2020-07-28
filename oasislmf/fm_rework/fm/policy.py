@@ -90,7 +90,7 @@ def calcrule_4(policy, loss_out, loss_in, deductible, over_limit, under_limit):
     deductible % TIV and limit
     """
 
-    maxi = policy['limit_1'] / policy['deductible_1']
+    maxi = policy['limit_1'] / (1 - policy['deductible_1'])
     for i in range(loss_in.shape[0]):
         effective_deductible = loss_in[i] * policy['deductible_1']
         deductible[i] += effective_deductible

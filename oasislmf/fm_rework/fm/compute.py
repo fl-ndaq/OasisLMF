@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-@njit(cache=True, fastmath=True)
+@njit(cache=True, fastmath=True, error_model="numpy")
 def compute_event(compute_queue, node_to_index, node_to_dependencies, node_to_profile, storage_to_len, options,
                   input_loss, input_not_null, profile):
     len_sample = input_loss.shape[1]
