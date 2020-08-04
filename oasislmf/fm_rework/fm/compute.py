@@ -1,7 +1,7 @@
 from .financial_structure import INPUT_STORAGE, TEMP_STORAGE, OUTPUT_STORAGE, STORE_LOSS_SUM_OPTION,\
     PROFILE, IL_PER_GUL, IL_PER_SUB_IL, PROPORTION, COPY, node_type, storage_type
 from .policy import calc
-from .common import float_equal_precision, nb_oasis_float, nb_oasis_int
+from .common import float_equal_precision, nb_oasis_float, nb_oasis_int, np_oasis_float
 from .queue import QueueTerminated
 
 from numba import njit, boolean, typeof
@@ -14,35 +14,34 @@ logger = logging.getLogger(__name__)
 def compute_event(compute_queue, node_to_index, node_to_dependencies, node_to_profile, storage_to_len, options,
                   input_loss, input_not_null, profile):
     len_sample = input_loss.shape[1]
-    temp_loss = np.zeros((storage_to_len[TEMP_STORAGE], len_sample), dtype=nb_oasis_float)
+    temp_loss = np.zeros((storage_to_len[TEMP_STORAGE], len_sample), dtype=np_oasis_float)
     temp_not_null = np.zeros((storage_to_len[TEMP_STORAGE], ), dtype=boolean)
-    output_loss = np.zeros((storage_to_len[OUTPUT_STORAGE], len_sample), dtype=nb_oasis_float)
+    output_loss = np.zeros((storage_to_len[OUTPUT_STORAGE], len_sample), dtype=np_oasis_float)
     output_not_null = np.zeros((storage_to_len[OUTPUT_STORAGE], ), dtype=boolean)
-    losses = {INPUT_STORAGE: input_loss,
-              TEMP_STORAGE: temp_loss,
-              OUTPUT_STORAGE: output_loss
-              }
-    not_null = {INPUT_STORAGE: input_not_null,
-                TEMP_STORAGE: temp_not_null,
-                OUTPUT_STORAGE: output_not_null
-                }
+    losses = [input_loss,
+              temp_loss,
+              output_loss
+              ]
+    not_null = [input_not_null,
+                temp_not_null,
+                output_not_null
+                ]
 
     if options[STORE_LOSS_SUM_OPTION]:
-        losses_sum = np.zeros_like(losses[TEMP_STORAGE], dtype=nb_oasis_float)
+        losses_sum = np.zeros_like(temp_loss, dtype=np_oasis_float)
     else:
-        losses_sum = losses[TEMP_STORAGE]
+        losses_sum = temp_loss
 
-    deductibles = np.zeros_like(losses[TEMP_STORAGE], dtype=nb_oasis_float)
-    over_limit = np.zeros_like(losses[TEMP_STORAGE], dtype=nb_oasis_float)
-    under_limit = np.zeros_like(losses[TEMP_STORAGE], dtype=nb_oasis_float)
+    deductibles = np.zeros_like(temp_loss, dtype=np_oasis_float)
+    over_limit = np.zeros_like(temp_loss, dtype=np_oasis_float)
+    under_limit = np.zeros_like(temp_loss, dtype=np_oasis_float)
 
     for node in compute_queue:
         node_storage, node_index = node_to_index[node]
         if node[3] == PROFILE:
             is_not_null = False
             loss_sum = losses_sum[node_index]
-            for dependency in node_to_dependencies[node]:
-                dependency_storage, dependency_index = node_to_index[dependency]
+            for dependency_storage, dependency_index in node_to_dependencies[node]:
                 if not_null[dependency_storage][dependency_index]:
                     loss_sum += losses[dependency_storage][dependency_index]
                     if dependency_storage == TEMP_STORAGE:
@@ -63,13 +62,12 @@ def compute_event(compute_queue, node_to_index, node_to_dependencies, node_to_pr
 
         elif node[3] == IL_PER_GUL:
             dependencies = node_to_dependencies[node]
-            top_node_storage, top_node_index = node_to_index[dependencies[0]]
+            top_node_storage, top_node_index = dependencies[0]
             if not_null[top_node_storage][top_node_index]:
                 node_loss = losses[node_storage][node_index]
 
                 top_loss = losses[top_node_storage][top_node_index]
-                for dependency in dependencies[1:]:
-                    dependency_node_storage, dependency_node_index = node_to_index[dependency]
+                for dependency_node_storage, dependency_node_index in dependencies[1:]:
                     node_loss += losses[dependency_node_storage][dependency_node_index]
 
                 for i in range(top_loss.shape[0]):
@@ -80,10 +78,8 @@ def compute_event(compute_queue, node_to_index, node_to_dependencies, node_to_pr
                 not_null[node_storage][node_index] = True
 
         elif node[3] == IL_PER_SUB_IL:
-            ba_node, il_node = node_to_dependencies[node]
-            ba_node_storage, ba_node_index = node_to_index[ba_node]
+            (ba_node_storage, ba_node_index), (il_node_storage, il_node_index) = node_to_dependencies[node]
             if not_null[ba_node_storage][ba_node_index]:
-                il_node_storage, il_node_index = node_to_index[il_node]
 
                 node_loss = losses[node_storage][node_index]
                 ba_loss = losses[ba_node_storage][ba_node_index]
@@ -101,17 +97,14 @@ def compute_event(compute_queue, node_to_index, node_to_dependencies, node_to_pr
                 not_null[node_storage][node_index] = True
 
         elif node[3] == PROPORTION:
-            top_node, il_node = node_to_dependencies[node]
-            top_node_storage, top_node_index = node_to_index[top_node]
-            il_node_storage, il_node_index = node_to_index[il_node]
+            (top_node_storage, top_node_index), (il_node_storage, il_node_index) = node_to_dependencies[node]
 
             if not_null[top_node_storage][top_node_index]:
                 losses[node_storage][node_index] = losses[top_node_storage][top_node_index] * losses[il_node_storage][il_node_index]
                 not_null[node_storage][node_index] = True
 
         elif node[3] == COPY:
-            copy_node = node_to_dependencies[node][0]
-            copy_node_storage, copy_node_index = node_to_index[copy_node]
+            copy_node_storage, copy_node_index  = node_to_dependencies[node][0]
             if not_null[copy_node_storage][copy_node_index]:
                 losses[node_storage][node_index] = losses[copy_node_storage][copy_node_index]
                 not_null[node_storage][node_index] = True
@@ -144,6 +137,8 @@ def event_computer(queue_in, queue_out, compute_queue, node_to_index, node_to_de
 
         logger.info(f"compute done")
     except Exception:
+        logger.exception(f"Exception in compute")
+        logger.error(input_loss)
         queue_in.terminated = True
         queue_out.terminated = True
         raise

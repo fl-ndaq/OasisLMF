@@ -22,7 +22,6 @@ from numba.typed import List, Dict
 import numpy as np
 import os
 
-
 INPUT_STORAGE = nb_oasis_int(0)
 TEMP_STORAGE = nb_oasis_int(1)
 OUTPUT_STORAGE = nb_oasis_int(2)
@@ -320,13 +319,16 @@ def process_programme(allocation_rule, programme_nodes, programme_node_to_layers
             else:
                 raise Exception('missing dependencies')
 
+    storage_to_len = np.array([i_input, i_temp, i_output], dtype=nb_oasis_int)
 
-    storage_to_len = Dict()
-    storage_to_len[INPUT_STORAGE] = i_input
-    storage_to_len[TEMP_STORAGE] = i_temp
-    storage_to_len[OUTPUT_STORAGE] = i_output
+    node_to_dependencies_index = Dict.empty(node_type, List.empty_list(storage_type))
+    for node, dependencies in node_to_dependencies.items():
+        dependencies_index = List()
+        for dependency in dependencies:
+            dependencies_index.append(node_to_index[dependency])
+        node_to_dependencies_index[node] = dependencies_index
 
-    return compute_queue, top_nodes, node_to_index, node_to_dependencies, node_to_profile, storage_to_len
+    return compute_queue, top_nodes, node_to_index, node_to_dependencies_index, node_to_profile, storage_to_len
 
 
 @njit(cache=True)
