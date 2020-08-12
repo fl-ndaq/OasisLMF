@@ -17,7 +17,7 @@ __all__ = [
 
 from .common import nb_oasis_int, almost_equal
 
-from numba import njit, types
+from numba import njit, types, from_dtype
 from numba.typed import List, Dict
 import numpy as np
 import os
@@ -72,6 +72,19 @@ fm_profile_step_dtype = np.dtype([('policytc_id', 'i4'),
                                   ('scale_2', 'f4'),
                                   ])
 fm_xref_dtype = np.dtype([('output_id', 'i4'), ('agg_id', 'i4'), ('layer_id', 'i4')])
+
+output_item_index_dtype = from_dtype(np.dtype([('output_id', np.int32), ('index', np.int32)]))
+compute_array_dtype = from_dtype(np.dtype([('layer_id', np.int32),
+                                           ('level_id', np.int32),
+                                           ('agg_id', np.int32),
+                                           ('storage', np.int32),
+                                           ('index', np.int32),
+                                           ('computation_id', np.int32),
+                                           ('dependencies_index_start', np.int32),
+                                           ('dependencies_index_end', np.int32),
+                                           ('profile', np.int32),
+                                           ]))
+dependencies_array_dtype = from_dtype(np.dtype([('storage', np.int32), ('index', np.int32)]))
 
 
 def load_static(static_path):
@@ -330,15 +343,57 @@ def process_programme(allocation_rule, programme_nodes, programme_node_to_layers
 
     return compute_queue, top_nodes, node_to_index, node_to_dependencies_index, node_to_profile, storage_to_len
 
-
 @njit(cache=True)
-def get_output_item_index(top_level, node_to_index, fm_xref):
-    output_item_index = List()
+def get_output_item_index(node_to_index, fm_xref):
+    output_item_index = np.empty(fm_xref.shape[0], dtype=output_item_index_dtype)
     for i in range(fm_xref.shape[0]):
         xref = fm_xref[i]
+        output = output_item_index[i]
         output_node = (nb_oasis_int(xref['layer_id']), nb_oasis_int(0), nb_oasis_int(xref['agg_id']), OUTPUT)
-        output_item_index.append((nb_oasis_int(xref['output_id']), node_to_index[output_node][1]))
+        output['output_id'] = nb_oasis_int(xref['output_id'])
+        output['index'] = node_to_index[output_node][1]
     return output_item_index
+
+
+@njit(cache=True)
+def to_arrays(compute_queue, node_to_index, node_to_dependencies, node_to_profile):
+    """(layer_id, level_id, agg_id, computation_id)"""
+    compute_array = np.empty(len(compute_queue), dtype=compute_array_dtype)
+    dependencies_index = 0
+    for i, node in enumerate(compute_queue):
+        compute_line = compute_array[i]
+
+        #node info
+        compute_line['layer_id'] = node[0]
+        compute_line['level_id'] = node[1]
+        compute_line['agg_id'] = node[2]
+        compute_line['computation_id'] = node[3]
+
+        #storage info
+        storage, index = node_to_index[node]
+        compute_line['storage'] = storage
+        compute_line['index'] = index
+
+        #dependency info
+        dependencies_len = len(node_to_dependencies[node])
+        compute_line['dependencies_index_start'] = dependencies_index
+        dependencies_index+=dependencies_len
+        compute_line['dependencies_index_end'] = dependencies_index
+
+        #profile info
+        if node[3] == PROFILE:
+            compute_line['profile'] = node_to_profile[node]
+
+    # reformat dependency as np array
+    dependencies_array = np.empty(dependencies_index, dtype=dependencies_array_dtype)
+    dependencies_index = 0
+    for node in compute_queue:
+        for storage, index in node_to_dependencies[node]:
+            dependency, dependencies_index = dependencies_array[dependencies_index], dependencies_index + 1
+            dependency['storage'] = storage
+            dependency['index'] = index
+
+    return compute_array, dependencies_array
 
 
 @njit(cache=True)
@@ -374,9 +429,10 @@ def prepare_financial_structure(allocation_rule, fm_programme, fm_policytc, fm_p
         fm_profile,
         top_level)
 
-    output_item_index = get_output_item_index(top_level, node_to_index, fm_xref)
+    output_item_index = get_output_item_index(node_to_index, fm_xref)
+    compute_array, dependencies_array = to_arrays(compute_queue, node_to_index, node_to_dependencies, node_to_profile)
 
-    return compute_queue, node_to_index, node_to_dependencies, node_to_profile, output_item_index, storage_to_len
+    return node_to_index, compute_array, dependencies_array, output_item_index, storage_to_len
 
 
 def load_financial_structure(allocation_rule, static_path):
@@ -397,7 +453,7 @@ def load_financial_structure(allocation_rule, static_path):
     options[STORE_LOSS_SUM_OPTION] = nb_oasis_int(allocation_rule==2)
 
     programme, policytc, profile, xref = load_static(static_path)
-    compute_queue, node_to_index, node_to_dependencies, node_to_profile, output_item_index, storage_to_len = prepare_financial_structure(allocation_rule, programme, policytc, profile, xref)
+    financial_structure = prepare_financial_structure(allocation_rule, programme, policytc, profile, xref)
+    node_to_index, compute_queue, dependencies, output_item_index, storage_to_len = financial_structure
 
-    return compute_queue, node_to_index, node_to_dependencies, node_to_profile, output_item_index, storage_to_len, options, profile
-
+    return node_to_index, compute_queue, dependencies, output_item_index, storage_to_len, options, profile

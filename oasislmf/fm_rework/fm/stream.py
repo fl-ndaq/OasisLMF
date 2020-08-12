@@ -135,12 +135,11 @@ def queue_event_reader(event_queue, file_in, node_to_index, len_indexes):
 @njit(cache=True)
 def load_event(as_int, as_float, event_id, output_item_index, losses, not_null):
     cursor = 0
-    for output_id, node_loss_index in output_item_index:
-
-        if not_null[node_loss_index]:
+    for output in output_item_index:
+        if not_null[output['index']]:
             as_int[cursor], cursor = event_id, cursor + 1
-            as_int[cursor], cursor = output_id, cursor + 1
-            loss = losses[node_loss_index]
+            as_int[cursor], cursor = output['output_id'], cursor + 1
+            loss = losses[output['index']]
 
             for i in range( - EXTRA_VALUES, 0):
                 as_int[cursor], cursor = i, cursor + 1
@@ -154,7 +153,6 @@ def load_event(as_int, as_float, event_id, output_item_index, losses, not_null):
             as_int[cursor], cursor = 0, cursor + 1
             as_float[cursor], cursor = 0, cursor + 1
     return cursor
-
 
 class EventWriter:
     def __init__(self, files_out, output_item_index, len_sample):

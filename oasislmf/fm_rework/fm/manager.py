@@ -1,5 +1,5 @@
 from .queue import TerminableQueue
-from .financial_structure import load_financial_structure, INPUT_STORAGE, TEMP_STORAGE, OUTPUT_STORAGE
+from .financial_structure import load_financial_structure, INPUT_STORAGE
 from .stream import read_stream_header, queue_event_reader, read_event, queue_event_writer, EventWriter
 from .compute import event_computer, compute_event
 try:
@@ -28,7 +28,7 @@ def run(run_mode, **kwargs):
 
 
 def run_threaded(allocation_rule, static_path, files_in, queue_in_size, files_out, queue_out_size, **kwargs):
-    compute_queue, node_to_index, node_to_dependencies, node_to_profile, output_item_index, storage_to_len, options, profile = load_financial_structure(
+    node_to_index, compute_queue, dependencies, output_item_index, storage_to_len, options, profile = load_financial_structure(
         allocation_rule, static_path)
     sentinel = 'STOP'
 
@@ -50,8 +50,7 @@ def run_threaded(allocation_rule, static_path, files_in, queue_in_size, files_ou
         reader_tasks = [executor.submit(queue_event_reader, queue_in, stream_in, node_to_index, storage_to_len[INPUT_STORAGE])
                         for stream_in in inputs]
         logger.info(f"reader_tasks started")
-        computation_task = executor.submit(event_computer, queue_in, queue_out, compute_queue, node_to_index,
-                                           node_to_dependencies, node_to_profile, storage_to_len,
+        computation_task = executor.submit(event_computer, queue_in, queue_out, compute_queue, dependencies, storage_to_len,
                                            options, profile, sentinel)
         logger.info(f"computation_task started")
         writer_tasks = [
@@ -77,12 +76,10 @@ def run_ray(allocation_rule, static_path, files_in, queue_in_size, files_out, qu
     """ray can only be use for compute as the stream interface is limited to the running machine"""
     ray.init(address=ray_address)
     computation_task = int(ray.available_resources()['CPU']) - 2
-    compute_queue, node_to_index, node_to_dependencies, node_to_profile, output_item_index, storage_to_len, options, profile = load_financial_structure(
+    node_to_index, compute_queue, dependencies, output_item_index, storage_to_len, options, profile = load_financial_structure(
         allocation_rule, static_path)
 
-    nb_obj = numba_to_python(compute_queue, node_to_index, node_to_dependencies, node_to_profile, storage_to_len,
-                             options)
-    py_compute_queue, py_node_to_index, py_node_to_dependencies, py_node_to_profile, py_storage_to_len, py_options = nb_obj
+    py_options = numba_to_python(options)
 
     sentinel = 'STOP'
 
@@ -102,8 +99,7 @@ def run_ray(allocation_rule, static_path, files_in, queue_in_size, files_out, qu
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(inputs) + len(outputs)) as executor:
         try:
-            compute_task = [ray_event_computer.remote(queue_in, queue_out, py_compute_queue, py_node_to_index,
-                                                      py_node_to_dependencies, py_node_to_profile, py_storage_to_len,
+            compute_task = [ray_event_computer.remote(queue_in, queue_out, compute_queue, dependencies, storage_to_len,
                                                       py_options, profile, sentinel) for _ in range(computation_task)]
             logger.info(f"computation_task started")
 
@@ -136,7 +132,7 @@ def run_ray(allocation_rule, static_path, files_in, queue_in_size, files_out, qu
 
 
 def run_synchronous(allocation_rule, static_path, files_in, files_out, **kwargs):
-    compute_queue, node_to_index, node_to_dependencies, node_to_profile, output_item_index, storage_to_len, options, profile = load_financial_structure(
+    node_to_index, compute_queue, dependencies, output_item_index, storage_to_len, options, profile = load_financial_structure(
         allocation_rule, static_path)
 
     if files_in is None:
@@ -150,7 +146,6 @@ def run_synchronous(allocation_rule, static_path, files_in, files_out, **kwargs)
     stream_type, len_sample = read_stream_header(stream_in)
     with EventWriter(files_out, output_item_index, len_sample + 4) as event_writer:
         for event_id, input_loss, input_not_null in read_event(stream_in, node_to_index, storage_to_len[INPUT_STORAGE], len_sample):
-            output_loss, output_not_null = compute_event(compute_queue, node_to_index, node_to_dependencies,
-                                                         node_to_profile, storage_to_len, options,
+            output_loss, output_not_null = compute_event(compute_queue, dependencies, storage_to_len, options,
                                                          input_loss, input_not_null, profile)
             event_writer.write((event_id, output_loss, output_not_null))
