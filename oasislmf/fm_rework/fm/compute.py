@@ -97,7 +97,7 @@ def compute_event(compute_queue, dependencies, storage_to_len, options, input_lo
         elif node['computation_id'] == PROPORTION:
             top_node, il_node = dependencies[node['dependencies_index_start']: node['dependencies_index_end']]
 
-            if not_null[top_node['storage']][top_node['index']]:
+            if not_null[il_node['storage']][il_node['index']] and not_null[top_node['storage']][top_node['index']]:
                 losses[node['storage']][node['index']] = losses[top_node['storage']][top_node['index']] * losses[il_node['storage']][il_node['index']]
                 not_null[node['storage']][node['index']] = True
 

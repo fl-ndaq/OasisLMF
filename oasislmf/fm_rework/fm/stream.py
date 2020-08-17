@@ -59,7 +59,7 @@ def stream_to_loss_table(stream_as_int, stream_as_float, valid_len, last_event_c
                 last_event_cursor = cursor
                 break
 
-            losses[i, sidx] = loss
+            losses[i, sidx] = 0 if np.isnan(loss) else loss
 
     return last_event_id, last_event_cursor, 0
 
@@ -142,8 +142,9 @@ def load_event(as_int, as_float, event_id, output_item_index, losses, not_null):
             loss = losses[output['index']]
 
             for i in range( - EXTRA_VALUES, 0):
-                as_int[cursor], cursor = i, cursor + 1
-                as_float[cursor], cursor = loss[i], cursor + 1
+                if i != -2 or loss[i] > float_equal_precision:# remove -2 if null
+                    as_int[cursor], cursor = i, cursor + 1
+                    as_float[cursor], cursor = loss[i], cursor + 1
 
             for i in range(1, loss.shape[0] - EXTRA_VALUES):
                 if loss[i] > float_equal_precision:
@@ -160,7 +161,8 @@ class EventWriter:
         self.output_item_index = output_item_index
 
         self.len_sample = len_sample # all normal sidx plus the extra value plus 1 (index 0)
-        nb_values = (2 * len_sample + 2) * len(output_item_index)  # (event_id + item_id + len_sample) * number of items
+        self.loss_shape_1 = len_sample + EXTRA_VALUES + 1
+        nb_values = (2 * (len_sample + EXTRA_VALUES + 1)) * len(output_item_index)  # (event_id + item_id + len_sample) * number of items
         self.int_size = np.dtype(np.int32).itemsize
         self.mv = memoryview(bytearray(nb_values * self.int_size))
 
@@ -183,7 +185,7 @@ class EventWriter:
 
     def write(self, event):
         event_id, loss, not_null = event
-        if self.len_sample != loss.shape[1]:
+        if self.loss_shape_1 != loss.shape[1]:
             raise ValueError(f"event {event_id} has a different sample len {loss.shape[1]}")
 
         cursor = load_event(self.as_int, self.as_float, event_id, self.output_item_index, loss, not_null) * self.int_size
@@ -195,7 +197,7 @@ def queue_event_writer(event_queue, files_out, output_item_index, sentinel):
         event = event_queue.get()
         if event != sentinel:
             event_id, loss, not_null = event
-            len_sample = loss.shape[1]
+            len_sample = loss.shape[1] - EXTRA_VALUES - 1
 
             with EventWriter(files_out, output_item_index, len_sample) as event_writer_handler:
                 logger.debug(f"writing {event[0]}")

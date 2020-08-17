@@ -144,7 +144,7 @@ def run_synchronous(allocation_rule, static_path, files_in, files_out, **kwargs)
         files_out = files_out[0]
 
     stream_type, len_sample = read_stream_header(stream_in)
-    with EventWriter(files_out, output_item_index, len_sample + 4) as event_writer:
+    with EventWriter(files_out, output_item_index, len_sample) as event_writer:
         for event_id, input_loss, input_not_null in read_event(stream_in, node_to_index, storage_to_len[INPUT_STORAGE], len_sample):
             output_loss, output_not_null = compute_event(compute_queue, dependencies, storage_to_len, options,
                                                          input_loss, input_not_null, profile)
