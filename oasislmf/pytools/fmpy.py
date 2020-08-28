@@ -1,4 +1,6 @@
-from fm import manager, logger
+#!/usr/bin/env python
+
+from .fm import manager, logger
 
 import argparse
 import logging
@@ -16,7 +18,7 @@ parser.add_argument('-v', '--logging-level', help='logging level (debug:10, info
                     default=30, type=int)
 
 
-if __name__ == '__main__':
+def main():
     kwargs = vars(parser.parse_args())
 
     # add handler to fm logger
@@ -28,3 +30,7 @@ if __name__ == '__main__':
     logger.setLevel(logging_level)
 
     manager.run(**kwargs)
+
+
+if __name__ == '__main__':
+    main()

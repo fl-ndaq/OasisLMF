@@ -104,6 +104,7 @@ class GenerateLosses(ComputationStep):
         {'name': 'ktools_num_fm_per_lb',   'default': KTOOL_N_FM_PER_LB,        'type':int, 'help': 'Number of fm per load balancer (0 means no load balancer)'},
         {'name': 'ktools_disable_guard',   'default': not KTOOLS_ERR_GUARD, 'action': 'store_true', 'help': 'Disables error handling in the ktools run script (abort on non-zero exitcode or output on stderr)'},
         {'name': 'ktools_fifo_relative',   'default': KTOOLS_FIFO_RELATIVE, 'action': 'store_true', 'help': 'Create ktools fifo queues under the ./fifo dir'},
+        {'name': 'fmpy',                   'default': False,                    'type':bool, 'help': 'use fmcalc python version instead of c++ version'},
 
         # Manager only options (pass data directy instead of filepaths)
         {'name': 'verbose',              'default': KTOOLS_DEBUG},
@@ -217,6 +218,7 @@ class GenerateLosses(ComputationStep):
                         gul_legacy_stream=self.ktools_legacy_stream,
                         fifo_tmp_dir=self.ktools_fifo_relative,
                         custom_gulcalc_cmd=self.model_custom_gulcalc,
+                        fmpy=self.fmpy,
                     )
                 except TypeError:
                     warnings.simplefilter("always")
