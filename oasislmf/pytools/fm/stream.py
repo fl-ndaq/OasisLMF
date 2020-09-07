@@ -27,8 +27,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-gul_header = np.int32(1 << 24).tobytes()
-fm_header = np.int32(2 << 24).tobytes()
+#gul_header = np.int32(1 << 24).tobytes()
+fm_header = np.int32(1 | 2 << 24).tobytes()
 
 
 buff_size = 1_048_576 * 32
@@ -54,10 +54,11 @@ def stream_to_loss_table(stream_as_int, stream_as_float, valid_len, last_event_c
         while cursor < valid_len - 2:
             sidx, cursor = nb_oasis_int(stream_as_int[cursor]), cursor + 1
             loss, cursor = nb_oasis_float(stream_as_float[cursor]), cursor + 1
-
             if sidx == 0:
                 last_event_cursor = cursor
                 break
+            elif sidx == -2:
+                pass
 
             losses[i, sidx] = 0 if np.isnan(loss) else loss
 
@@ -83,6 +84,7 @@ def read_event(stream_in, node_to_index, len_inputs, len_sample):
 
     last_event_cursor = 0
     read_cursor = 0
+
     while True:
         readable, _, exceptional = select.select([stream_in], [], [stream_in])
         if exceptional:
@@ -92,6 +94,7 @@ def read_event(stream_in, node_to_index, len_inputs, len_sample):
 
         if len_read == 0:
             break
+
         while True:
             last_event_id, last_event_cursor, full_event = stream_to_loss_table(stream_as_int32, stream_as_float32, valid_buf // number_size,
                                                                  last_event_cursor, node_to_index, losses, not_null)
@@ -104,7 +107,10 @@ def read_event(stream_in, node_to_index, len_inputs, len_sample):
                 mv[:read_cursor] = mv[number_size * last_event_cursor: valid_buf]
                 last_event_cursor = 0
                 break
-    yield last_event_id, losses,  not_null
+    try:
+        yield last_event_id, losses,  not_null
+    except UnboundLocalError:  # Nothing was read
+        pass
 
 
 def queue_event_reader(event_queue, file_in, node_to_index, len_indexes):
@@ -141,10 +147,9 @@ def load_event(as_int, as_float, event_id, output_item_index, losses, not_null):
             as_int[cursor], cursor = output['output_id'], cursor + 1
             loss = losses[output['index']]
 
-            for i in range( - EXTRA_VALUES, 0):
-                if i != -2 or loss[i] > float_equal_precision:# remove -2 if null
-                    as_int[cursor], cursor = i, cursor + 1
-                    as_float[cursor], cursor = loss[i], cursor + 1
+            for i in [-3, -1]:
+                as_int[cursor], cursor = i, cursor + 1
+                as_float[cursor], cursor = loss[i], cursor + 1
 
             for i in range(1, loss.shape[0] - EXTRA_VALUES):
                 if loss[i] > float_equal_precision:
@@ -154,6 +159,7 @@ def load_event(as_int, as_float, event_id, output_item_index, losses, not_null):
             as_int[cursor], cursor = 0, cursor + 1
             as_float[cursor], cursor = 0, cursor + 1
     return cursor
+
 
 class EventWriter:
     def __init__(self, files_out, output_item_index, len_sample):

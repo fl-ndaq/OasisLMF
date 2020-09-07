@@ -138,13 +138,13 @@ def get_all_children(parent_to_children, node):
 def get_programe_dependency(fm_programme):
     parent_to_children = Dict()
     top_level = nb_oasis_int(0)
-    programme_nodes= set()
+    programme_nodes = set()
     for i in range(fm_programme.shape[0]):
         programme = fm_programme[i]
         parent = (nb_oasis_int(programme['level_id']), nb_oasis_int(programme['to_agg_id']))
         child = (nb_oasis_int(programme['level_id'] - 1), nb_oasis_int(programme['from_agg_id']))
-        programme_nodes.add(parent)
         programme_nodes.add(child)
+        programme_nodes.add(parent)
         if parent not in parent_to_children:
             _list = List()
             _list.append(child)
@@ -317,6 +317,17 @@ def process_programme(allocation_rule, programme_nodes, programme_node_to_layers
             if node_il in node_to_dependencies:
                 children = node_to_dependencies[node_il]
                 for child in children:
+                    while True:
+                        if (child[1], child[2]) in parent_to_children:
+                            sub_childs = parent_to_children[(child[1], child[2])]
+                            sub_node = effective_node(node_to_index, node_ba[0], child)
+                            if len(sub_childs) == 1 and does_nothing(fm_profile[node_to_profile[sub_node]]):
+                                child = effective_node(node_to_index, node_ba[0], sub_childs[0])
+                            else:
+                                break
+                        else:
+                            break
+
                     node_child = (node_ba[0], child[1], child[2], PROPORTION)
                     dependencies = List()
                     dependencies.append(node_il_per_sub_il)

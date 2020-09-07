@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 @njit(cache=True, fastmath=True, error_model="numpy")
-def compute_event(compute_queue, dependencies, storage_to_len, options, input_loss, input_not_null, profile):
-    len_sample = input_loss.shape[1]
-    temp_loss = np.zeros((storage_to_len[TEMP_STORAGE], len_sample), dtype=np_oasis_float)
-    temp_not_null = np.zeros((storage_to_len[TEMP_STORAGE], ), dtype=boolean)
-    output_loss = np.zeros((storage_to_len[OUTPUT_STORAGE], len_sample), dtype=np_oasis_float)
-    output_not_null = np.zeros((storage_to_len[OUTPUT_STORAGE], ), dtype=boolean)
+def compute_event(compute_queue, dependencies, input_loss, input_not_null, profile,
+                  temp_loss, temp_not_null, losses_sum, deductibles, over_limit, under_limit,
+                  output_loss, output_not_null):
+    temp_not_null.fill(0)
+    output_not_null.fill(0)
+
     losses = [input_loss,
               temp_loss,
               output_loss
@@ -26,36 +26,37 @@ def compute_event(compute_queue, dependencies, storage_to_len, options, input_lo
                 output_not_null
                 ]
 
-    if options[STORE_LOSS_SUM_OPTION]:
-        losses_sum = np.zeros_like(temp_loss, dtype=np_oasis_float)
-    else:
-        losses_sum = temp_loss
-
-    deductibles = np.zeros_like(temp_loss, dtype=np_oasis_float)
-    over_limit = np.zeros_like(temp_loss, dtype=np_oasis_float)
-    under_limit = np.zeros_like(temp_loss, dtype=np_oasis_float)
-
     for node in compute_queue:
         if node['computation_id'] == PROFILE:
-            is_not_null = False
-            loss_sum = losses_sum[node['index']]
-
             for dependency in dependencies[node['dependencies_index_start']: node['dependencies_index_end']]:
                 if not_null[dependency['storage']][dependency['index']]:
-                    loss_sum += losses[dependency['storage']][dependency['index']]
-                    if dependency['storage'] == TEMP_STORAGE:
-                        deductibles[node['index']] += deductibles[dependency['index']]
-                        over_limit[node['index']] += over_limit[dependency['index']]
-                        under_limit[node['index']] += under_limit[dependency['index']]
                     is_not_null = True
+                    break
+            else:
+                is_not_null = False
 
             if is_not_null:
+                loss_sum = losses_sum[node['index']]
+                loss_sum.fill(0)
+                deductibles[node['index']].fill(0)
+                over_limit[node['index']].fill(0)
+                under_limit[node['index']].fill(0)
+
+                for dependency in dependencies[node['dependencies_index_start']: node['dependencies_index_end']]:
+                    if not_null[dependency['storage']][dependency['index']]:
+                        loss_sum += losses[dependency['storage']][dependency['index']]
+                        if dependency['storage'] == TEMP_STORAGE:
+                            deductibles[node['index']] += deductibles[dependency['index']]
+                            over_limit[node['index']] += over_limit[dependency['index']]
+                            under_limit[node['index']] += under_limit[dependency['index']]
+
                 calc(profile[node['profile']],
                      losses[node['storage']][node['index']],
                      loss_sum,
                      deductibles[node['index']],
                      over_limit[node['index']],
                      under_limit[node['index']])
+
                 not_null[node['storage']][node['index']] = True
 
         elif node['computation_id'] == IL_PER_GUL:
@@ -107,7 +108,29 @@ def compute_event(compute_queue, dependencies, storage_to_len, options, input_lo
                 losses[node['storage']][node['index']] = losses[copy_node['storage']][copy_node['index']]
                 not_null[node['storage']][node['index']] = True
 
-    return output_loss, output_not_null
+
+@njit(cache=True)
+def init_intermediary_variable(storage_to_len, len_sample, options):
+    temp_loss = np.empty((storage_to_len[TEMP_STORAGE], len_sample), dtype=np_oasis_float)
+    temp_not_null = np.empty((storage_to_len[TEMP_STORAGE],), dtype=boolean)
+
+    if options[STORE_LOSS_SUM_OPTION]:
+        losses_sum = np.empty((storage_to_len[TEMP_STORAGE], len_sample), dtype=np_oasis_float)
+    else:
+        losses_sum = temp_loss
+
+    deductibles = np.empty((storage_to_len[TEMP_STORAGE], len_sample), dtype=np_oasis_float)
+    over_limit = np.empty((storage_to_len[TEMP_STORAGE], len_sample), dtype=np_oasis_float)
+    under_limit = np.empty((storage_to_len[TEMP_STORAGE], len_sample), dtype=np_oasis_float)
+
+    return temp_loss, temp_not_null, losses_sum, deductibles, over_limit, under_limit
+
+
+@njit(cache=True)
+def init_loss_variable(storage_to_len, storage, len_sample):
+    loss = np.empty((storage_to_len[storage], len_sample), dtype=np_oasis_float)
+    not_null = np.empty((storage_to_len[storage],), dtype=boolean)
+    return loss, not_null
 
 
 def event_computer(queue_in, queue_out, compute_queue, dependencies, storage_to_len, options, profile, sentinel):
@@ -118,12 +141,25 @@ def event_computer(queue_in, queue_out, compute_queue, dependencies, storage_to_
                 break
 
             event_id, input_loss, input_not_null = event_in
-
-            logger.debug(f"computing {event_id}")
             input_loss = np.array(input_loss)
             input_not_null = np.array(input_not_null)
-            output_loss, output_not_null = compute_event(compute_queue, dependencies, storage_to_len, options,
-                                                         input_loss, input_not_null, profile)
+            logger.debug(f"computing {event_id}")
+
+            try:
+                output_loss, output_not_null = init_loss_variable(storage_to_len, OUTPUT_STORAGE, len_sample)
+                compute_event(compute_queue, dependencies, input_loss, input_not_null, profile,
+                              temp_loss, temp_not_null, losses_sum,deductibles, over_limit, under_limit,
+                              output_loss, output_not_null)
+            except UnboundLocalError: # initialize variable
+                len_sample = input_loss.shape[1]
+
+                temp_loss, temp_not_null, losses_sum, deductibles, over_limit, under_limit = init_intermediary_variable(storage_to_len, len_sample, options)
+                output_loss, output_not_null = init_loss_variable(storage_to_len, OUTPUT_STORAGE, len_sample)
+
+                compute_event(compute_queue, dependencies, input_loss, input_not_null, profile,
+                              temp_loss, temp_not_null, losses_sum,deductibles, over_limit, under_limit,
+                              output_loss, output_not_null)
+
             logger.debug(f"computed {event_id}")
 
             try:
