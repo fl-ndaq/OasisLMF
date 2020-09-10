@@ -5,6 +5,7 @@ __all__ = [
     'INPUT_STORAGE',
     'TEMP_STORAGE',
     'OUTPUT_STORAGE',
+    'TOP_UP',
     'PROFILE',
     'IL_PER_GUL',
     'IL_PER_SUB_IL',
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 INPUT_STORAGE = nb_oasis_int(0)
 TEMP_STORAGE = nb_oasis_int(1)
 OUTPUT_STORAGE = nb_oasis_int(2)
+TOP_UP = nb_oasis_int(3)
 
 PROFILE = nb_oasis_int(0)
 IL_PER_GUL = nb_oasis_int(1)
@@ -266,8 +268,9 @@ def process_programme(allocation_rule, programme_nodes, programme_node_to_layers
                 node_to_index[node], i_input = (INPUT_STORAGE, nb_oasis_int(i_input)), i_input + 1
 
                 temp_not_visited.remove(programme_node)
-
         not_visited, temp_not_visited = temp_not_visited, set(temp_not_visited)
+
+    i_top_up = i_temp
     if allocation_rule == 0:
         for node in top_nodes:
             copy_node = (node[0], node[1], node[2], COPY)
@@ -345,7 +348,7 @@ def process_programme(allocation_rule, programme_nodes, programme_node_to_layers
             else:
                 raise Exception('missing dependencies')
 
-    storage_to_len = np.array([i_input, i_temp, i_output], dtype=nb_oasis_int)
+    storage_to_len = np.array([i_input, i_temp, i_output, i_top_up], dtype=nb_oasis_int)
 
     node_to_dependencies_index = Dict.empty(node_type, List.empty_list(storage_type))
     for node, dependencies in node_to_dependencies.items():

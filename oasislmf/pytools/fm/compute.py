@@ -1,4 +1,4 @@
-from .financial_structure import TEMP_STORAGE, OUTPUT_STORAGE, STORE_LOSS_SUM_OPTION,\
+from .financial_structure import TEMP_STORAGE, OUTPUT_STORAGE, TOP_UP, STORE_LOSS_SUM_OPTION,\
     PROFILE, IL_PER_GUL, IL_PER_SUB_IL, PROPORTION, COPY
 from .policy import calc
 from .common import float_equal_precision, np_oasis_float
@@ -115,13 +115,13 @@ def init_intermediary_variable(storage_to_len, len_sample, options):
     temp_not_null = np.empty((storage_to_len[TEMP_STORAGE],), dtype=boolean)
 
     if options[STORE_LOSS_SUM_OPTION]:
-        losses_sum = np.empty((storage_to_len[TEMP_STORAGE], len_sample), dtype=np_oasis_float)
+        losses_sum = np.empty((storage_to_len[TOP_UP], len_sample), dtype=np_oasis_float)
     else:
         losses_sum = temp_loss
 
-    deductibles = np.empty((storage_to_len[TEMP_STORAGE], len_sample), dtype=np_oasis_float)
-    over_limit = np.empty((storage_to_len[TEMP_STORAGE], len_sample), dtype=np_oasis_float)
-    under_limit = np.empty((storage_to_len[TEMP_STORAGE], len_sample), dtype=np_oasis_float)
+    deductibles = np.empty((storage_to_len[TOP_UP], len_sample), dtype=np_oasis_float)
+    over_limit = np.empty((storage_to_len[TOP_UP], len_sample), dtype=np_oasis_float)
+    under_limit = np.empty((storage_to_len[TOP_UP], len_sample), dtype=np_oasis_float)
 
     return temp_loss, temp_not_null, losses_sum, deductibles, over_limit, under_limit
 
