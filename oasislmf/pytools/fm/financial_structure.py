@@ -21,6 +21,8 @@ from numba import njit, types, from_dtype
 from numba.typed import List, Dict
 import numpy as np
 import os
+import logging
+logger = logging.getLogger(__name__)
 
 INPUT_STORAGE = nb_oasis_int(0)
 TEMP_STORAGE = nb_oasis_int(1)
@@ -466,5 +468,6 @@ def load_financial_structure(allocation_rule, static_path):
     programme, policytc, profile, xref = load_static(static_path)
     financial_structure = prepare_financial_structure(allocation_rule, programme, policytc, profile, xref)
     node_to_index, compute_queue, dependencies, output_item_index, storage_to_len = financial_structure
-
+    logger.info(f'compute_queue has {len(compute_queue)} elements')
+    logger.info(f'storage_to_len : {storage_to_len}')
     return node_to_index, compute_queue, dependencies, output_item_index, storage_to_len, options, profile
