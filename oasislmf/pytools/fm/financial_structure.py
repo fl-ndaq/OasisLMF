@@ -317,18 +317,18 @@ def process_programme(allocation_rule, programme_nodes, programme_node_to_layers
             if node_il in node_to_dependencies:
                 children = node_to_dependencies[node_il]
                 for child in children:
+                    res_child = child
                     while True:
-                        if (child[1], child[2]) in parent_to_children:
-                            sub_childs = parent_to_children[(child[1], child[2])]
-                            sub_node = effective_node(node_to_index, node_ba[0], child)
-                            if len(sub_childs) == 1 and does_nothing(fm_profile[node_to_profile[sub_node]]):
-                                child = effective_node(node_to_index, node_ba[0], sub_childs[0])
+                        if (res_child[1], res_child[2]) in parent_to_children:
+                            sub_childs = parent_to_children[(res_child[1], res_child[2])]
+                            if len(sub_childs) == 1:
+                                res_child = effective_node(node_to_index, node_ba[0], sub_childs[0])
                             else:
                                 break
                         else:
                             break
 
-                    node_child = (node_ba[0], child[1], child[2], PROPORTION)
+                    node_child = (node_ba[0], res_child[1], res_child[2], PROPORTION)
                     dependencies = List()
                     dependencies.append(node_il_per_sub_il)
                     dependencies.append(child)
