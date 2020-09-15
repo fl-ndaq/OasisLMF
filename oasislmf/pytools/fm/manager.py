@@ -131,6 +131,7 @@ def run_ray(allocation_rule, static_path, files_in, queue_in_size, files_out, qu
 
 import tempfile
 import resource
+import gc
 def run_synchronous(allocation_rule, static_path, files_in, files_out, **kwargs):
     node_to_index, compute_queue, dependencies, output_item_index, storage_to_len, options, profile = load_financial_structure(
         allocation_rule, static_path)
@@ -155,4 +156,5 @@ def run_synchronous(allocation_rule, static_path, files_in, files_out, **kwargs)
                 compute_event(compute_queue, dependencies, input_loss, input_not_null, profile,
                               temp_loss, temp_not_null, losses_sum, deductibles, over_limit, under_limit, output_loss, output_not_null)
                 event_writer.write((event_id, output_loss, output_not_null))
+                gc.collect()
 
