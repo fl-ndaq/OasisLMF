@@ -134,7 +134,7 @@ import tempfile
 import numpy as np
 from .common import float_equal_precision, nb_oasis_float, nb_oasis_int, null_index
 def run_synchronous(allocation_rule, static_path, files_in, files_out, **kwargs):
-    node_to_index, compute_queue, dependencies, output_item_index, storage_to_len, options, profile = load_financial_structure(
+    compute_queue, dependencies, output_item_index, storage_to_len, options, profile = load_financial_structure(
         allocation_rule, static_path)
 
     if files_in is None:
@@ -153,7 +153,7 @@ def run_synchronous(allocation_rule, static_path, files_in, files_out, **kwargs)
         output_loss, output_index = init_loss_variable(storage_to_len, OUTPUT_STORAGE, len_array, tempdir)
 
         with EventWriter(files_out, output_item_index, len_sample) as event_writer:
-            for event_id in read_event(stream_in, node_to_index, input_loss, input_index):
+            for event_id in read_event(stream_in, input_loss, input_index):
                 compute_event(compute_queue, dependencies, input_loss, input_index, profile,
                               temp_loss, temp_index, losses_sum, deductibles, over_limit, under_limit, output_loss, output_index)
                 event_writer.write((event_id, output_loss, output_index))

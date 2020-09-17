@@ -66,12 +66,12 @@ EXTRA_VALUES = 2
 #     return last_event_id, last_event_cursor, 0
 
 @njit(cache=True)
-def stream_to_loss_table(stream_as_int, stream_as_float, valid_buf, last_event_id, cursor, loss_index, node_to_index, losses, index):
+def stream_to_loss_table(stream_as_int, stream_as_float, valid_buf, last_event_id, cursor, loss_index, losses, index):
     """valid len must be divisible par 2*4 bytes"""
     valid_len = (valid_buf // 8) * 2
     if last_event_id == 0:
         event_id, cursor = stream_as_int[cursor], cursor + 1
-        i, cursor = node_to_index[(nb_oasis_int(1), nb_oasis_int(0), nb_oasis_int(stream_as_int[cursor]), PROFILE)][1], cursor + 1
+        i, cursor = nb_oasis_int(stream_as_int[cursor]) - 1, cursor + 1
         index[i] = loss_index
         last_event_id = event_id
     else:
@@ -92,7 +92,7 @@ def stream_to_loss_table(stream_as_int, stream_as_float, valid_buf, last_event_i
                 loss_index += 1
         else:
             event_id, cursor = stream_as_int[cursor], cursor + 1
-            i, cursor = node_to_index[(nb_oasis_int(1), nb_oasis_int(0), nb_oasis_int(stream_as_int[cursor]), PROFILE)][1], cursor + 1
+            i, cursor = nb_oasis_int(stream_as_int[cursor]) - 1, cursor + 1
             index[i] = loss_index
             losses[loss_index].fill(0)
 
@@ -108,7 +108,7 @@ def read_stream_header(stream_obj):
     return stream_type, len_sample
 
 
-def read_event(stream_in, node_to_index, losses, index):
+def read_event(stream_in, losses, index):
 
     # losses = np.zeros([len_inputs, len_sample + EXTRA_VALUES + 1], dtype=np.float32)
     # not_null = np.zeros([len_inputs, ], dtype=np.bool)
@@ -137,7 +137,7 @@ def read_event(stream_in, node_to_index, losses, index):
 
         while True:
             last_event_id, cursor, loss_index, event_id = stream_to_loss_table(stream_as_int32, stream_as_float32, valid_buf, last_event_id, cursor,
-                                                                                            loss_index, node_to_index, losses, index)
+                                                                                            loss_index, losses, index)
             # last_event_id, last_event_cursor, full_event = stream_to_loss_table(stream_as_int32, stream_as_float32, valid_buf // number_size,
             #                                                      last_event_cursor, node_to_index, losses, index)
             if event_id:
