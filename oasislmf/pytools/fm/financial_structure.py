@@ -1,5 +1,6 @@
 __all__ = [
     'load_financial_structure',
+    'create_financial_structure',
     'load_static',
     'prepare_financial_structure',
     'INPUT_STORAGE',
@@ -454,7 +455,7 @@ def prepare_financial_structure(allocation_rule, fm_programme, fm_policytc, fm_p
     return compute_array, dependencies_array, output_item_index, storage_to_len
 
 
-def load_financial_structure(allocation_rule, static_path):
+def create_financial_structure(allocation_rule, static_path):
     """
 
     :param allocation_rule: int
@@ -476,4 +477,21 @@ def load_financial_structure(allocation_rule, static_path):
     compute_queue, dependencies, output_item_index, storage_to_len = financial_structure
     logger.info(f'compute_queue has {len(compute_queue)} elements')
     logger.info(f'storage_to_len : {storage_to_len}')
+
+    np.save(os.path.join(static_path, f'compute_queue_{allocation_rule}'), compute_queue)
+    np.save(os.path.join(static_path, f'dependencies_{allocation_rule}'), dependencies)
+    np.save(os.path.join(static_path, f'output_item_index_{allocation_rule}'), output_item_index)
+    np.save(os.path.join(static_path, f'storage_to_len_{allocation_rule}'), storage_to_len)
+    np.save(os.path.join(static_path, f'options_{allocation_rule}'), options)
+    np.save(os.path.join(static_path, f'profile_{allocation_rule}'), profile)
+
+
+def load_financial_structure(allocation_rule, static_path):
+    compute_queue = np.load(os.path.join(static_path, f'compute_queue_{allocation_rule}.npy'), mmap_mode='r')
+    dependencies = np.load(os.path.join(static_path, f'dependencies_{allocation_rule}.npy'), mmap_mode='r')
+    output_item_index = np.load(os.path.join(static_path, f'output_item_index_{allocation_rule}.npy'), mmap_mode='r')
+    storage_to_len = np.load(os.path.join(static_path, f'storage_to_len_{allocation_rule}.npy'), mmap_mode='r')
+    options = np.load(os.path.join(static_path, f'options_{allocation_rule}.npy'), mmap_mode='r')
+    profile = np.load(os.path.join(static_path, f'profile_{allocation_rule}.npy'), mmap_mode='r')
+
     return compute_queue, dependencies, output_item_index, storage_to_len, options, profile
